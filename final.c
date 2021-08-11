@@ -75,7 +75,12 @@ void uploadContacts(macaddress *closeMacs, int limit){
     }
   }
   writeFile(arr, "Contacts.txt");
-  sleep(2);
+  system("cp Contacts.txt embedded/");
+  system("cd embedded");
+  system("git add Contacts.txt");
+  system("git commit -m \"Contacts\"");
+  system("git push");
+  //sleep(2);
   printf("Contacts have been uploaded successfully!\n");
   free(arr);
 }
