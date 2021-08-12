@@ -7,14 +7,11 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <stdint.h>
+#include <assert.h>
 
 
-#define NUMBER_OF_ADDRESSESS 5
+#define NUMBER_OF_ADDRESSESS 100
 #define MAC_LENGTH 17
-
-struct uint48 {
-    uint64_t x:48;
-} __attribute__((packed));
 
 typedef struct{ 
     struct timeval tv;
@@ -22,15 +19,9 @@ typedef struct{
     int id;
 } macaddress;
 
-typedef struct contact
-{
-  struct uint48 macaddress;
-  //double timestamp;
-} contact;
-
 char ** mac_produce();
 bool testCOVID();
-void writeFile(char **a, char *n);
+void writeFile(char **a, char *n, int limit);
 //char *readFile(char *filename, int line);
 
 struct timeval tic(){
@@ -56,7 +47,6 @@ macaddress *BTnearMe(char **array){
   time_t t;
   srand((unsigned) time(&t));
   int x=(rand() % NUMBER_OF_ADDRESSESS);
-  printf("%d\n",x);
   for (int i=0; i<MAC_LENGTH; i++){
     mac->value[i]=array[x][i];
   }
@@ -66,7 +56,8 @@ macaddress *BTnearMe(char **array){
 
 void uploadContacts(macaddress *closeMacs, int limit){
   printf("Uploading contacts...\n");
-  char **arr = (char **)malloc(NUMBER_OF_ADDRESSESS*sizeof(char *));
+  printf("       .\n       .\n");
+  char **arr = (char **)malloc(limit*sizeof(char *));
   char *b="none";
   for (int i=0; i<limit; i++){
     char *a=closeMacs[i].value;
@@ -74,25 +65,22 @@ void uploadContacts(macaddress *closeMacs, int limit){
       arr[i] = a;
     }
   }
-  writeFile(arr, "Contacts.txt");
-  system("cp Contacts.txt embedded/");
-  system("cd embedded");
-  system("git add Contacts.txt");
-  system("git commit -m \"Contacts\"");
-  system("git push");
-  //sleep(2);
-  printf("Contacts have been uploaded successfully!\n");
-  free(arr);
+  char *name=(char *)malloc(100 * sizeof(char));
+  int hours, minutes, seconds, day, month, year;
+  time_t now;
+  time(&now); 
+  sprintf(name, "Contacts_%s.txt", ctime(&now));
+  writeFile(arr, name, (limit-1));
+  sleep(2);
+  printf("Contacts have been uploaded successfully!\n\n");
 }
 
 int *in(macaddress *arr, macaddress *target, int limit) {
   int res[2]={0, 0};
   int *ptr=res;
   char *b=target->value;
-  printf("%s\n",arr[0].value);
   for (int i=0; i<limit; i++) {
     char *a=arr[i].value;
-    printf("%s\n",a);
     if(strncmp(a, b, strlen(b)) == 0) {
       res[0]=1;
       res[1]=i;
@@ -105,15 +93,6 @@ int main() {
   
   char ** addressess =  mac_produce();
 
-  /*
-  macaddress *mac=BTnearMe(addressess);
-  for (int i=0; i<MAC_LENGTH; i++)
-    printf("%c",mac->value[i]);
-  printf("\n");
-  //printf("size=%d\n",sizeof(contact));
-  
-  //uploadContacts(addressess);
-  */
   macaddress *macsNearME = (macaddress *)malloc(1*sizeof(macaddress));
   macaddress *closeMacs = (macaddress *)malloc(1*sizeof(macaddress));
 
@@ -122,13 +101,26 @@ int main() {
   int i=0, j=0;
   
   for (;;){
+    for(int k=0; k<j; k++){
+      struct timeval begin = macsNearME[k].tv;
+      double end = toc(begin);
+      if(end>12)
+        strcpy(macsNearME[k].value, "none");
+    }
+    for(int k=0; k<i; k++){
+      struct timeval begin = closeMacs[k].tv;
+      double end = toc(begin);
+      if(end>12096)
+        strcpy(closeMacs[k].value, "none");
+    }
     macaddress *mac = BTnearMe(addressess);
+    /*
     printf("New mac: ");
     for (int k=0; k<MAC_LENGTH; k++)
-      printf("%c",mac->value[k]);
+      printf("%c",mac->value[k]);                          //kai auto einai print gia elegxo
     printf("\n");
+    */
     int *a=in(macsNearME, mac, (j+1));
-    printf("%d\n",a[0]);
     if (a[0] == 1){
       struct timeval start1 = macsNearME[a[1]].tv;
       double final1 = toc(start1);
@@ -137,7 +129,6 @@ int main() {
       }
       else{
         int *b=in(closeMacs, mac, (i+1));
-        printf("%d\n",b[0]);
         if (b[0] == 0){
           if (final1 >= 3){
             strcpy(closeMacs[i].value, mac->value);
@@ -157,53 +148,52 @@ int main() {
       }
     }
     else{
-      strcpy(macsNearME[j].value, mac->value);
-      macsNearME[j].tv = mac->tv;
-      macsNearME[j].id = j;
-      j++;
-      macsNearME = (macaddress *)realloc(macsNearME, (j+1)*sizeof(macaddress));
+      int pos=-1;
+      char *empty="none";
+      for (int k=0; k<j; k++){
+        char *str=macsNearME[k].value;
+        if(strncmp(str, empty, strlen(empty)) == 0)
+          pos=k;
+      } 
+      if (pos == -1){
+        strcpy(macsNearME[j].value, mac->value);
+        macsNearME[j].tv = mac->tv;
+        macsNearME[j].id = j;
+        j++;
+        macsNearME = (macaddress *)realloc(macsNearME, (j+1)*sizeof(macaddress));
+      }
+      else{
+        strcpy(macsNearME[pos].value, mac->value);
+        macsNearME[pos].tv = mac->tv;
+        macsNearME[pos].id = pos;
+      }
     }
+    /*
+    printf("//////  Macs Near Me   ///////\n");
+    for (int k=0; k<(j+1); k++)
+      printf("%s\n",macsNearME[k].value);
+    printf("\n");                                              //auta einai ta prints gia na elegxete ti simbainei
+    printf("//////  Close Macs   ///////\n");
+    for (int k=0; k<(i+1); k++)
+      printf("%s\n",closeMacs[k].value);
+    printf("\n");
+    */
     double fhours = toc(hours);
-    if(fhours > 14){
+    if(fhours > 144){
       if (testCOVID()){
+        printf("The test is positive!\n\n");
         uploadContacts(closeMacs, (i+1));
       }
+      else
+        printf("The test is negative!\n\n");
+      hours=tic();
     }
     double final = toc(start);
     if (final > 25920){
       break;
     }
-    printf("//////  Macs Near Me   ///////\n");
-    for (int k=0; k<(j+1); k++)
-      printf("%s\n",macsNearME[k].value);
-    printf("\n");
-    printf("//////  Close Macs   ///////\n");
-    for (int k=0; k<(i+1); k++)
-      printf("%s\n",closeMacs[k].value);
-    printf("\n");
-    sleep(1);
+    sleep(0.1);
   }
-
-  /*
-  for (int i=0 ; i < NUMBER_OF_ADDRESSESS ; i++){
-    for(int j=0; j < MAC_LENGTH; j++)
-      printf("%c", addressess[i][j]);
-    printf("\n");
-  }
-  
-  bool test=testCOVID();
-  printf("The test is %s", test ? "positive" : "negative"); 
-  printf("\n");
-  */
- 
-  /*
-  int x;
-  printf("insert no. of mac address: ");
-  scanf("%d",&x);
-  for (int i=0; i<MAC_LENGTH; i++)
-    printf("%c", addressess[(x-1)][i]);
-  printf("\n");
-  */
  
   free(macsNearME);
   free(closeMacs);
@@ -240,27 +230,29 @@ char ** mac_produce(){
     strcpy(address,str);
     addressess[i]=address;
   }
-  writeFile(addressess,"MAC_Addressess.txt");
+  writeFile(addressess,"MAC_Addressess.txt", NUMBER_OF_ADDRESSESS);
   return addressess;
 }
 
 bool testCOVID(){
-
+  printf("Testing for COVID 19...\n");
+  printf("          .\n          .\n");
   bool isPositive=false;
   time_t t;
   srand((unsigned) time(&t));
-  if ( (rand()%100) > 90){
+  if ( (rand()%100) > 80){
     isPositive=true;
   }
   return isPositive;
 }
 
-void writeFile(char **array, char *n){
+void writeFile(char **array, char *n, int limit){
     FILE *fp;
-    char *name = (char *)malloc(6 * sizeof(char));
-    sprintf(name, n);
+    char *name = (char *)malloc(100 * sizeof(char));
+    sprintf(name,"%s", n);
     fp = fopen(name, "w"); 
-    for (int i = 0; i < NUMBER_OF_ADDRESSESS; i++){
+    for (int i = 0; i < limit; i++){
+      if(array[i]!=NULL)
         fprintf(fp, "%s\n", array[i]); 
     }
     fclose(fp);
@@ -268,27 +260,4 @@ void writeFile(char **array, char *n){
 
 
 
-/*
-char *readFile(char *filename, int line){
-  FILE *fp = fopen(filename, "r");
-  char *mac;
-  if (fp == NULL){
-      printf("Error: could not open file %s", filename);
-  }
-  char buffer[(MAC_LENGTH+1)];
-  int i=0;
-  while (fgets(buffer, (MAC_LENGTH+1), fp)){
-    i++;
-    if(i == line){ 
-      mac=&buffer[0];   
-      printf("%s\n", buffer); 
-    } 
-  }
-  fclose(fp);
-  
-   for (int i=0; i<MAC_LENGTH; i++)
-    printf("%c", mac[i]);
-  printf("\n");
-  return mac;
-}
-*/
+
